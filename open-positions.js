@@ -18,6 +18,17 @@ let refreshInterval = null;
 window.addEventListener('DOMContentLoaded', () => {
   loadOpenPositions();
   
+  // Podłącz przycisk odświeżania z nagłówka
+  const refreshBtn = document.getElementById('refresh-prices-btn');
+  if (refreshBtn) {
+    refreshBtn.onclick = () => {
+      if (openPositionsData.length > 0) {
+        console.log('🔄 Ręczne odświeżanie cen...');
+        renderOpenPositionsLive(openPositionsData, document.getElementById('open-table'));
+      }
+    };
+  }
+  
   // Automatyczne odświeżanie co 30 sekund
   refreshInterval = setInterval(() => {
     if (openPositionsData.length > 0) {
@@ -332,24 +343,13 @@ async function fetchLivePrice(symbol) {
 }
 
 async function renderOpenPositionsLive(data, container) {
-  // Dodaj nagłówek z przyciskiem odświeżania
-  const header = document.createElement('div');
-  header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;';
-  
-  const refreshBtn = document.createElement('button');
-  refreshBtn.textContent = '🔄 Odśwież ceny';
-  refreshBtn.style.cssText = 'padding: 5px 10px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer;';
-  refreshBtn.onclick = () => renderOpenPositionsLive(openPositionsData, container);
-  
-  const lastUpdate = document.createElement('span');
-  lastUpdate.textContent = `Ostatnie odświeżenie: ${new Date().toLocaleTimeString('pl-PL')}`;
-  lastUpdate.style.cssText = 'font-size: 12px; color: #6b7280;';
-  
-  header.appendChild(refreshBtn);
-  header.appendChild(lastUpdate);
+  // Aktualizuj wskaźnik czasu
+  const liveIndicator = document.getElementById('live-data-indicator');
+  if (liveIndicator) {
+    liveIndicator.textContent = new Date().toLocaleTimeString('pl-PL');
+  }
   
   container.innerHTML = '';
-  container.appendChild(header);
   
   const loadingDiv = document.createElement('div');
   loadingDiv.className = 'loading';

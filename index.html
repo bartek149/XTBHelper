@@ -4,7 +4,7 @@
   <link rel="stylesheet" href="style.css" />
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>XTB Transaction Dashboard</title>
+  <title>🛠️ XTBHelper - Trading Analytics</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="script.js" defer></script>
   <script src="open-positions.js" defer></script>
@@ -12,10 +12,25 @@
  <!-- <script src="top-movers.js" defer></script> -->
 </head>
 <body>
-  <h1>📈 XTB Transaction Dashboard</h1>
+  <header class="main-header">
+    <div class="header-content">
+      <h1 class="header-title">
+        <span class="header-icon">🛠️</span>
+        <span class="header-text">XTBHelper</span>
+        <span class="header-subtitle">Trading Analytics</span>
+      </h1>
+      <div class="header-status">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span class="status-text">Live Data</span>
+        </div>
+      </div>
+    </div>
+  </header>
 
-  <!-- GÓRNE 2 TABELKI + POZYCJE OTWARTE -->
-  <div id="tables-wrapper" style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+  <main class="main-content">
+    <!-- GÓRNE 2 TABELKI + POZYCJE OTWARTE -->
+    <div id="tables-wrapper" class="tables-grid">
     <div class="table-box" style="flex: 1;">
       <b>📊 All Transactions</b>
       <div id="all-table" class="scrollable-table"></div>
@@ -37,16 +52,22 @@
 
 
     <div class="table-box" style="flex: 1;">
-      <b>📌 Open Positions</b>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <b>📌 Open Positions</b>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span id="live-data-indicator" style="font-size: 0.6rem; color: #10b981; font-weight: 600;"></span>
+          <button id="refresh-prices-btn" class="refresh-btn">🔄 Odśwież</button>
+        </div>
+      </div>
       <div id="open-table" class="scrollable-table"></div>
     </div>
   </div>
 
   <!-- DOLNY RZĄD (3 boxy) -->
-  <div id="bottom-row" style="display: grid; grid-template-columns: 66.4% 15.8% 15.8%; gap: 1.3rem; margin-top: 2rem;">
+  <div id="bottom-row" class="bottom-charts">
     <div class="table-box">
       <b>📈 Kapitał i Zysk (%)</b>
-      <canvas id="profitChart" style="max-height:400px;"></canvas>
+      <canvas id="profitChart"></canvas>
     </div>
     <div class="table-box glow-green">
       <b>📊 Najlepsze Spółki</b>
@@ -70,6 +91,8 @@
     </div>
   </div>
 -->
+  </main>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="dashboard.js"></script>
 </body>
