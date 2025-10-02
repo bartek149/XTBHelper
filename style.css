@@ -1,0 +1,271 @@
+/* ================= RESET & BASE ================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', Montserrat, system-ui, sans-serif;
+  background: #39393c;
+  color: #5f6267;
+  padding: 1.5rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.7rem;
+  color: #938989;
+}
+
+/* ================== CONTROLS ================== */
+.controls {
+  display: flex;
+  justify-content: space-between; /* przyciski po lewej, metryki po prawej */
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap; /* złamanie na mniejszych ekranach */
+  margin-bottom: 1.1rem;
+}
+
+/* przyciski */
+.controls .btns {
+  display: flex;
+  gap: 10px;
+}
+.controls button {
+  background: linear-gradient(135deg, #4f74cb, #344765);
+  border: none;
+  color: #ffffff;
+  padding: 0.35rem 0.9rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  transition: transform 0.25s ease, filter 0.25s ease, box-shadow 0.25s ease;
+  font-weight: 600;
+  font-size: 0.75rem;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.3);
+}
+
+.controls button:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.15);   /* zamiast nowego gradientu */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* ================== MONTH SUMMARY ================== */
+#month-summary {
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+#month-summary .item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 16px;
+  font-family: 'Poppins','Inter',system-ui,sans-serif;
+}
+
+#month-summary .value {
+  min-width: 30px;  /* wyrównanie cyfr */
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-weight: 600;
+}
+
+#month-summary .pos { color: limegreen; }
+#month-summary .neg { color: #ff4d4d; }
+#month-summary .neu { color: #aaa; }
+
+/* ================== LAYOUT ================== */
+#tables-wrapper {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.1rem;
+}
+
+/* tylko górne boxy mają sztywną wysokość */
+#tables-wrapper .table-box {
+  height: 360px;
+}
+
+/* ================== TABLE BOX ================== */
+.table-box {
+  position: relative;
+  background: #2b2b2e;
+  border-radius: 0.35rem;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+  transition: box-shadow 0.4s ease;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* glow efekty */
+.table-box:not(.glow-red):not(.glow-green):hover {
+  box-shadow:
+    0 0 12px rgba(59, 130, 246, 0.3),
+    0 0 24px rgba(59, 130, 246, 0.2);
+}
+
+.glow-green:hover {
+  box-shadow:
+    0 0 12px rgba(34, 197, 94, 0.4),
+    0 0 24px rgba(34, 197, 94, 0.25);
+}
+
+.glow-red:hover {
+  box-shadow:
+    0 0 12px rgba(239, 68, 68, 0.4),
+    0 0 24px rgba(239, 68, 68, 0.25);
+}
+
+/* Box titles */
+.table-box b {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  color: #7a7878;
+}
+
+/* ================== TABLE ================== */
+.scrollable-table {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-radius: 0.375rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.68rem;
+  color: #ffffff;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: #484646;
+  color: #60a5fa;
+  font-weight: 650;
+  border-bottom: 2px solid #3b82f6;
+  z-index: 1;
+}
+
+th,
+td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+tbody tr:nth-child(even) {
+  background: #484646;
+}
+
+tbody tr:hover {
+  background: #4b5563;
+}
+
+td:first-child {
+  font-weight: 500;
+}
+
+/* ================== CANVAS ================== */
+.table-box canvas {
+  max-height: 280px;
+  height: 100%;
+}
+
+canvas {
+  filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));
+  transition: transform 0.3s ease;
+}
+
+canvas#profitChart {
+  background: #1f2937;
+  border-radius: 0.35rem;
+  padding: 0.75rem;
+  box-shadow: inset 0 0 6px rgba(0, 255, 100, 0.15);
+  animation: glowchart 4s infinite ease-in-out;
+}
+
+@keyframes glowchart {
+  0%   { box-shadow: inset 0 0 6px rgba(0, 255, 100, 0.1); }
+  50%  { box-shadow: inset 0 0 14px rgba(0, 255, 100, 0.25); }
+  100% { box-shadow: inset 0 0 6px rgba(0, 255, 100, 0.1); }
+}
+
+/* ================== SCROLLBAR ================== */
+.scrollable-table::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollable-table::-webkit-scrollbar-thumb {
+  background-color: #4b5563;
+  border-radius: 4px;
+}
+.scrollable-table::-webkit-scrollbar-track {
+  background-color: #1f1f1f;
+}
+
+/* ================== LIVE PRICES ================== */
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #60a5fa;
+  font-weight: 500;
+}
+
+.loading-price {
+  color: #fbbf24;
+  animation: pulse 1.5s infinite;
+}
+
+.status-loading {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Refresh button hover effect */
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Summary row styling */
+tr[style*="background: linear-gradient"] {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+tr[style*="background: linear-gradient"]:hover {
+  background: linear-gradient(135deg, #374151, #4b5563) !important;
+  transform: scale(1.01);
+  transition: all 0.2s ease;
+}
+
+/* Summary row animation */
+@keyframes summaryGlow {
+  0%, 100% { 
+    box-shadow: 0 0 5px rgba(96, 165, 250, 0.3);
+  }
+  50% { 
+    box-shadow: 0 0 15px rgba(96, 165, 250, 0.6);
+  }
+}
+
+tr[style*="background: linear-gradient"] {
+  animation: summaryGlow 3s ease-in-out infinite;
+}

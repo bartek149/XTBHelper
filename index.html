@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XTB Transaction Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="script.js" defer></script>
+  <script src="open-positions.js" defer></script>
+  <script src="pieChart.js" defer></script>
+ <!-- <script src="top-movers.js" defer></script> -->
+</head>
+<body>
+  <h1>📈 XTB Transaction Dashboard</h1>
+
+  <!-- GÓRNE 2 TABELKI + POZYCJE OTWARTE -->
+  <div id="tables-wrapper" style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+    <div class="table-box" style="flex: 1;">
+      <b>📊 All Transactions</b>
+      <div id="all-table" class="scrollable-table"></div>
+    </div>
+
+<div class="table-box" style="flex: 1;">
+<div class="controls">
+  <div class="btns">
+    <button onclick="changeMonth(-1)">⬅️ Prev Month</button>
+    <button onclick="changeMonth(1)">➡️ Next Month</button>
+  </div>
+  <div id="month-summary"></div>
+</div>
+
+<b id="month-header">📆 …</b>
+<div id="recent-table" class="scrollable-table"></div>
+
+</div>
+
+
+    <div class="table-box" style="flex: 1;">
+      <b>📌 Open Positions</b>
+      <div id="open-table" class="scrollable-table"></div>
+    </div>
+  </div>
+
+  <!-- DOLNY RZĄD (3 boxy) -->
+  <div id="bottom-row" style="display: grid; grid-template-columns: 66.4% 15.8% 15.8%; gap: 1.3rem; margin-top: 2rem;">
+    <div class="table-box">
+      <b>📈 Kapitał i Zysk (%)</b>
+      <canvas id="profitChart" style="max-height:400px;"></canvas>
+    </div>
+    <div class="table-box glow-green">
+      <b>📊 Najlepsze Spółki</b>
+      <canvas id="bestStocksChart"></canvas>
+    </div>
+    <div class="table-box glow-red">
+      <b>📉 Najgorsze Spółki</b>
+      <canvas id="worstStocksChart"></canvas>
+    </div>
+  </div>
+
+  <!-- TOP MOVERS: XETRA 
+  <div id="xetra-movers" style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 2rem;">
+    <div class="table-box" style="flex: 1;">
+      <b>🚀 Największe Wzrosty (XETRA)</b>
+      <div id="top-gainers-table" class="scrollable-table"></div>
+    </div>
+    <div class="table-box" style="flex: 1;">
+      <b>📉 Największe Spadki (XETRA)</b>
+      <div id="top-losers-table" class="scrollable-table"></div>
+    </div>
+  </div>
+-->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

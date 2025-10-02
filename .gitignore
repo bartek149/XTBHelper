@@ -1,0 +1,72 @@
+# XTB Dashboard - .gitignore
+
+# Pliki z danymi osobistymi
+raport.xlsx
+*.xlsx
+*.xls
+*.csv
+
+# Pliki tymczasowe
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# Logi i cache
+*.log
+*.cache
+.vscode/
+.idea/
+
+# Node.js (jeśli kiedyś dodamy)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+
+# Build files (jeśli kiedyś dodamy build process)
+dist/
+build/
+out/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Pliki konfiguracyjne z kluczami API
+config.js
+secrets.js
+api-keys.js
