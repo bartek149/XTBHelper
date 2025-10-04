@@ -4,6 +4,9 @@
   <link rel="stylesheet" href="style.css" />
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>🛠️ XTBHelper - Trading Analytics</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="script.js" defer></script>
@@ -19,6 +22,11 @@
         <span class="header-text">XTBHelper</span>
         <span class="header-subtitle">Trading Analytics</span>
       </h1>
+      <nav class="tab-navigation">
+        <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
+        <button class="tab-btn" data-tab="news">📰 News</button>
+        <button class="tab-btn" data-tab="reports">📊 Raporty</button>
+      </nav>
       <div class="header-status">
         <div class="status-indicator">
           <span class="status-dot"></span>
@@ -29,8 +37,10 @@
   </header>
 
   <main class="main-content">
-    <!-- GÓRNE 2 TABELKI + POZYCJE OTWARTE -->
-    <div id="tables-wrapper" class="tables-grid">
+    <!-- DASHBOARD VIEW -->
+    <div id="dashboard-view" class="tab-content active">
+      <!-- GÓRNE 2 TABELKI + POZYCJE OTWARTE -->
+      <div id="tables-wrapper" class="tables-grid">
     <div class="table-box" style="flex: 1;">
       <b>📊 All Transactions</b>
       <div id="all-table" class="scrollable-table"></div>
@@ -91,9 +101,34 @@
     </div>
   </div>
 -->
+    </div>
+
+    <!-- NEWS VIEW -->
+    <div id="news-view" class="tab-content">
+      <div class="news-header">
+        <h2>📰 Financial News</h2>
+        <p>Latest news for your portfolio instruments</p>
+      </div>
+      <div id="news-container" class="news-grid">
+        <div class="loading-news">🔄 Loading financial news...</div>
+      </div>
+    </div>
+
+    <!-- REPORTS VIEW -->
+    <div id="reports-view" class="tab-content">
+      <div class="reports-header">
+        <h2>📊 Nadchodzące Raporty Finansowe</h2>
+        <p>Kalendarz raportów kwartalnych i rocznych dla Twojego portfela</p>
+      </div>
+      <div id="reports-container" class="reports-grid">
+        <div class="loading-reports">🔄 Loading financial reports calendar...</div>
+      </div>
+    </div>
+
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="dashboard.js"></script>
+  <script src="dashboard.js?v=3"></script>
+  <script src="tabs.js?v=3"></script>
 </body>
 </html>
