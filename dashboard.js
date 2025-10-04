@@ -7,10 +7,13 @@
  * - Interactive capital growth charts
  * - Monthly transaction filtering
  * - Deposit tracking and ROI calculations
+ * - CSV export functionality
  * 
  * @author XTBHelper
- * @version 1.0.0
+ * @version 1.6.0
  */
+
+console.log('🔄 XTBHelper Dashboard v1.6.0 - Added turnover return % and fixed column widths!');
 
 window.addEventListener("DOMContentLoaded", () => {
   fetch("raport.xlsx")
@@ -47,6 +50,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const deposits = extractDeposits(wsDeposits);
 
       renderCapitalChart(closedEntries, deposits);
+      setupCsvExport(closedEntries, deposits);
      
     })
     .catch((err) => {
@@ -318,3 +322,425 @@ function extractDeposits(sheet) {
     }))
     .filter(entry => entry.date && !isNaN(entry.amount));
 }
+
+/**
+ * Setup CSV export functionality for Capital chart data
+ * @param {Array} entries - Closed position entries
+ * @param {Array} deposits - Deposit entries
+ */
+function setupCsvExport(entries, deposits) {
+  const exportBtn = document.getElementById('exportCsvBtn');
+  const showTableBtn = document.getElementById('showTableBtn');
+  
+  if (!exportBtn || !showTableBtn) return;
+
+  exportBtn.addEventListener('click', () => {
+    exportCapitalDataToCsv(entries, deposits);
+  });
+
+  showTableBtn.addEventListener('click', () => {
+    showMonthlyTable(entries, deposits);
+  });
+}
+
+/**
+ * Export monthly capital summary to CSV
+ * @param {Array} entries - Closed position entries
+ * @param {Array} deposits - Deposit entries
+ */
+function exportCapitalDataToCsv(entries, deposits) {
+  const exportBtn = document.getElementById('exportCsvBtn');
+  
+  try {
+    // Process data and group by month
+    const profits = entries.map(e => {
+      const date = parseDateValue(e['Close time']);
+      const amount = parseFloat(e['Gross P/L']);
+      return date && !isNaN(amount)
+        ? { date, amount, type: 'profit' }
+        : null;
+    }).filter(e => e);
+
+    const depositsOnly = deposits.map(d => ({ 
+      ...d, 
+      type: 'deposit' 
+    }));
+
+    const allEvents = [...depositsOnly, ...profits];
+    allEvents.sort((a, b) => a.date - b.date);
+
+    // Group by month - create proper monthly summaries
+    const monthlyData = {};
+    
+    // First, collect all unique months
+    const monthKeys = new Set();
+    allEvents.forEach(e => {
+      const monthKey = `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}`;
+      monthKeys.add(monthKey);
+    });
+    
+    // Sort months chronologically
+    const sortedMonthKeys = Array.from(monthKeys).sort();
+    
+    // Calculate start capital for each month
+    let runningCapital = 0;
+    
+    sortedMonthKeys.forEach(monthKey => {
+      // Clean month name without year
+      const monthName = new Date(monthKey + '-01').toLocaleDateString('pl-PL', { month: 'long' });
+      
+      // Get all events for this month
+      const monthEvents = allEvents.filter(e => {
+        const eventMonthKey = `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}`;
+        return eventMonthKey === monthKey;
+      });
+      
+      // Calculate totals for this month
+      const monthlyEarnings = monthEvents
+        .filter(e => e.type === 'profit')
+        .reduce((sum, e) => sum + e.amount, 0);
+        
+      const monthlyDeposits = monthEvents
+        .filter(e => e.type === 'deposit')
+        .reduce((sum, e) => sum + e.amount, 0);
+      
+      // Calculate turnover from closed positions - money used to buy shares
+      const monthStart = new Date(monthKey + '-01');
+      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
+      
+      const monthClosedPositions = entries.filter(e => {
+        const closeDate = parseDateValue(e['Close time']);
+        return closeDate && closeDate >= monthStart && closeDate <= monthEnd;
+      });
+      
+      // Calculate turnover as the absolute value of the original investment (Volume * Open Price)
+      const monthlyTurnover = monthClosedPositions.reduce((sum, position) => {
+        const volume = parseFloat(position['Volume']) || 0;
+        const openPrice = parseFloat(position['Open price']) || 0;
+        return sum + Math.abs(volume * openPrice);
+      }, 0);
+      
+      // Store monthly data
+      monthlyData[monthKey] = {
+        monthName,
+        earnings: monthlyEarnings,
+        deposits: monthlyDeposits,
+        turnover: monthlyTurnover,
+        capitalStart: runningCapital,
+        capitalEnd: runningCapital + monthlyEarnings + monthlyDeposits
+      };
+      
+      // Update running capital for next month
+      runningCapital += monthlyEarnings + monthlyDeposits;
+    });
+
+    // Create CSV data
+    const csvData = [];
+    csvData.push([
+      'Miesiąc',
+      'Kapitał na początku',
+      'Zarobione w miesiącu',
+      'Wpłaty w miesiącu',
+      'Obrót miesięczny',
+      'Zwrot z obrotu %',
+      'Kapitał na końcu',
+      'Zwrot w %'
+    ]);
+
+    sortedMonthKeys.forEach(monthKey => {
+      const month = monthlyData[monthKey];
+      
+      // Calculate percentages with proper handling
+      // Return % should be calculated from total capital (earnings / total capital * 100)
+      const returnPercent = month.capitalEnd > 0 ? (month.earnings / month.capitalEnd * 100) : 0;
+      // Turnover return % (earnings / turnover * 100)
+      const turnoverReturnPercent = month.turnover > 0 ? (month.earnings / month.turnover * 100) : 0;
+
+      csvData.push([
+        month.monthName,
+        month.capitalStart.toFixed(2),
+        month.earnings.toFixed(2),
+        month.deposits.toFixed(2),
+        month.turnover.toFixed(2),
+        turnoverReturnPercent.toFixed(2),
+        month.capitalEnd.toFixed(2),
+        returnPercent.toFixed(2)
+      ]);
+    });
+
+    // Add summary row
+    const totalEarnings = Object.values(monthlyData).reduce((sum, month) => sum + month.earnings, 0);
+    const totalDeposits = Object.values(monthlyData).reduce((sum, month) => sum + month.deposits, 0);
+    const overallReturn = totalDeposits > 0 ? (totalEarnings / totalDeposits * 100) : 0;
+    const finalCapital = runningCapital; // This is the final capital after all months
+
+    const totalTurnover = Object.values(monthlyData).reduce((sum, month) => sum + month.turnover, 0);
+    const overallReturnPercent = finalCapital > 0 ? (totalEarnings / finalCapital * 100) : 0;
+    const overallTurnoverReturnPercent = totalTurnover > 0 ? (totalEarnings / totalTurnover * 100) : 0;
+    
+    csvData.push(['']); // Empty row
+    csvData.push([
+      'PODSUMOWANIE',
+      '',
+      totalEarnings.toFixed(2),
+      totalDeposits.toFixed(2),
+      totalTurnover.toFixed(2),
+      overallTurnoverReturnPercent.toFixed(2),
+      finalCapital.toFixed(2),
+      overallReturnPercent.toFixed(2)
+    ]);
+
+    // Convert to CSV string with proper formatting
+    const csvContent = csvData.map(row => 
+      row.map(cell => {
+        // Handle empty cells
+        if (cell === '' || cell === null || cell === undefined) {
+          return '""';
+        }
+        // Escape quotes and wrap in quotes
+        const cleanCell = String(cell).replace(/"/g, '""');
+        return `"${cleanCell}"`;
+      }).join(',')
+    ).join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `XTBHelper_Miesieczny_Przeglad_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    console.log('✅ Monthly CSV export completed successfully');
+    console.log('📊 Monthly data summary:', Object.keys(monthlyData).map(key => ({
+      month: monthlyData[key].monthName,
+      earnings: monthlyData[key].earnings,
+      deposits: monthlyData[key].deposits,
+      capitalStart: monthlyData[key].capitalStart,
+      capitalEnd: monthlyData[key].capitalEnd
+    })));
+    
+    // Show success message
+    const originalText = exportBtn.textContent;
+    exportBtn.textContent = '✅ Gotowe!';
+    exportBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    
+    setTimeout(() => {
+      exportBtn.textContent = originalText;
+    }, 2000);
+
+  } catch (error) {
+    console.error('❌ Error exporting CSV:', error);
+    
+    // Show error message
+    const originalText = exportBtn.textContent;
+    exportBtn.textContent = '❌ Błąd';
+    exportBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+    
+    setTimeout(() => {
+      exportBtn.textContent = originalText;
+      exportBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+    }, 2000);
+  }
+}
+
+/**
+ * Show monthly table in modal
+ * @param {Array} entries - Closed position entries
+ * @param {Array} deposits - Deposit entries
+ */
+function showMonthlyTable(entries, deposits) {
+  const modal = document.getElementById('monthlyTableModal');
+  const container = document.getElementById('monthlyTableContainer');
+  
+  if (!modal || !container) return;
+
+  // Show modal
+  modal.style.display = 'block';
+  container.innerHTML = '<div class="loading">Ładowanie danych...</div>';
+
+  try {
+    // Use the same logic as CSV export to generate monthly data
+    const profits = entries.map(e => {
+      const date = parseDateValue(e['Close time']);
+      const amount = parseFloat(e['Gross P/L']);
+      return date && !isNaN(amount)
+        ? { date, amount, type: 'profit' }
+        : null;
+    }).filter(e => e);
+
+    const depositsOnly = deposits.map(d => ({ 
+      ...d, 
+      type: 'deposit' 
+    }));
+
+    const allEvents = [...depositsOnly, ...profits];
+    allEvents.sort((a, b) => a.date - b.date);
+
+    // Group by month - same logic as CSV export
+    const monthlyData = {};
+    const monthKeys = new Set();
+    allEvents.forEach(e => {
+      const monthKey = `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}`;
+      monthKeys.add(monthKey);
+    });
+    
+    const sortedMonthKeys = Array.from(monthKeys).sort();
+    let runningCapital = 0;
+    
+    sortedMonthKeys.forEach(monthKey => {
+      const monthName = new Date(monthKey + '-01').toLocaleDateString('pl-PL', { month: 'long' });
+      
+      const monthEvents = allEvents.filter(e => {
+        const eventMonthKey = `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}`;
+        return eventMonthKey === monthKey;
+      });
+      
+      const monthlyEarnings = monthEvents
+        .filter(e => e.type === 'profit')
+        .reduce((sum, e) => sum + e.amount, 0);
+        
+      const monthlyDeposits = monthEvents
+        .filter(e => e.type === 'deposit')
+        .reduce((sum, e) => sum + e.amount, 0);
+      
+      // Calculate turnover from closed positions - money used to buy shares
+      const monthStart = new Date(monthKey + '-01');
+      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
+      
+      const monthClosedPositions = entries.filter(e => {
+        const closeDate = parseDateValue(e['Close time']);
+        return closeDate && closeDate >= monthStart && closeDate <= monthEnd;
+      });
+      
+      // Calculate turnover as the absolute value of the original investment (Volume * Open Price)
+      const monthlyTurnover = monthClosedPositions.reduce((sum, position) => {
+        const volume = parseFloat(position['Volume']) || 0;
+        const openPrice = parseFloat(position['Open price']) || 0;
+        return sum + Math.abs(volume * openPrice);
+      }, 0);
+      
+      monthlyData[monthKey] = {
+        monthName,
+        earnings: monthlyEarnings,
+        deposits: monthlyDeposits,
+        turnover: monthlyTurnover,
+        capitalStart: runningCapital,
+        capitalEnd: runningCapital + monthlyEarnings + monthlyDeposits
+      };
+      
+      runningCapital += monthlyEarnings + monthlyDeposits;
+    });
+
+    // Generate table HTML
+    let tableHTML = `
+      <table class="monthly-table">
+        <thead>
+          <tr>
+            <th>Miesiąc</th>
+            <th>Kapitał na początku</th>
+            <th>Zarobione w miesiącu</th>
+            <th>Wpłaty w miesiącu</th>
+            <th>Obrót miesięczny</th>
+            <th>Zwrot z obrotu %</th>
+            <th>Kapitał na końcu</th>
+            <th>Zwrot w %</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    sortedMonthKeys.forEach(monthKey => {
+      const month = monthlyData[monthKey];
+      // Return % should be calculated from total capital (earnings / total capital * 100)
+      const returnPercent = month.capitalEnd > 0 ? (month.earnings / month.capitalEnd * 100) : 0;
+      // Turnover return % (earnings / turnover * 100)
+      const turnoverReturnPercent = month.turnover > 0 ? (month.earnings / month.turnover * 100) : 0;
+
+      const earningsClass = month.earnings > 0 ? 'positive' : month.earnings < 0 ? 'negative' : 'neutral';
+      const returnClass = returnPercent > 0 ? 'positive' : returnPercent < 0 ? 'negative' : 'neutral';
+      const turnoverReturnClass = turnoverReturnPercent > 0 ? 'positive' : turnoverReturnPercent < 0 ? 'negative' : 'neutral';
+
+      tableHTML += `
+        <tr>
+          <td><strong>${month.monthName}</strong></td>
+          <td>${month.capitalStart.toFixed(2)} EUR</td>
+          <td class="${earningsClass}">${month.earnings.toFixed(2)} EUR</td>
+          <td>${month.deposits.toFixed(2)} EUR</td>
+          <td><strong>${month.turnover.toFixed(2)} EUR</strong></td>
+          <td class="${turnoverReturnClass}"><strong>${turnoverReturnPercent.toFixed(2)}%</strong></td>
+          <td><strong>${month.capitalEnd.toFixed(2)} EUR</strong></td>
+          <td class="${returnClass}">${returnPercent.toFixed(2)}%</td>
+        </tr>
+      `;
+    });
+
+    // Add summary row
+    const totalEarnings = Object.values(monthlyData).reduce((sum, month) => sum + month.earnings, 0);
+    const totalDeposits = Object.values(monthlyData).reduce((sum, month) => sum + month.deposits, 0);
+    const totalTurnover = Object.values(monthlyData).reduce((sum, month) => sum + month.turnover, 0);
+    const finalCapital = runningCapital;
+
+    const summaryEarningsClass = totalEarnings > 0 ? 'positive' : totalEarnings < 0 ? 'negative' : 'neutral';
+    const overallReturnPercent = finalCapital > 0 ? (totalEarnings / finalCapital * 100) : 0;
+    const overallTurnoverReturnPercent = totalTurnover > 0 ? (totalEarnings / totalTurnover * 100) : 0;
+    const summaryReturnClass = overallReturnPercent > 0 ? 'positive' : overallReturnPercent < 0 ? 'negative' : 'neutral';
+    const summaryTurnoverReturnClass = overallTurnoverReturnPercent > 0 ? 'positive' : overallTurnoverReturnPercent < 0 ? 'negative' : 'neutral';
+
+    tableHTML += `
+        <tr class="summary-row">
+          <td><strong>PODSUMOWANIE</strong></td>
+          <td>-</td>
+          <td class="${summaryEarningsClass}"><strong>${totalEarnings.toFixed(2)} EUR</strong></td>
+          <td><strong>${totalDeposits.toFixed(2)} EUR</strong></td>
+          <td><strong>${totalTurnover.toFixed(2)} EUR</strong></td>
+          <td class="${summaryTurnoverReturnClass}"><strong>${overallTurnoverReturnPercent.toFixed(2)}%</strong></td>
+          <td><strong>${finalCapital.toFixed(2)} EUR</strong></td>
+          <td class="${summaryReturnClass}"><strong>${overallReturnPercent.toFixed(2)}%</strong></td>
+        </tr>
+      </tbody>
+    </table>
+    `;
+
+    container.innerHTML = tableHTML;
+
+  } catch (error) {
+    console.error('❌ Error generating monthly table:', error);
+    container.innerHTML = `
+      <div style="color: #ef4444; text-align: center; padding: 2rem;">
+        ❌ Błąd podczas ładowania danych: ${error.message}
+      </div>
+    `;
+  }
+}
+
+// Setup modal event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('monthlyTableModal');
+  const closeBtn = document.getElementById('closeModalBtn');
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+  }
+
+  // Close modal when clicking outside
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+  }
+
+  // Close modal with Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.style.display === 'block') {
+      modal.style.display = 'none';
+    }
+  });
+});

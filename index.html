@@ -76,7 +76,17 @@
   <!-- DOLNY RZĄD (3 boxy) -->
   <div id="bottom-row" class="bottom-charts">
     <div class="table-box">
-      <b>📈 Kapitał i Zysk (%)</b>
+      <div class="chart-header">
+        <b>📈 Kapitał i Zysk (%)</b>
+        <div class="chart-buttons">
+          <button id="showTableBtn" class="export-btn table-btn" title="Pokaż tabelę miesięczną">
+            📋 Tabela
+          </button>
+          <button id="exportCsvBtn" class="export-btn" title="Eksportuj miesięczny przegląd do CSV">
+            📊 CSV
+          </button>
+        </div>
+      </div>
       <canvas id="profitChart"></canvas>
     </div>
     <div class="table-box glow-green">
@@ -127,8 +137,23 @@
 
   </main>
 
+  <!-- Monthly Table Modal -->
+  <div id="monthlyTableModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📊 Miesięczny Przegląd Kapitału</h2>
+        <button id="closeModalBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="monthlyTableContainer">
+          <div class="loading">Ładowanie danych...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="dashboard.js?v=3"></script>
-  <script src="tabs.js?v=3"></script>
+  <script src="dashboard.js?v=13"></script>
+  <script src="tabs.js?v=13"></script>
 </body>
 </html>
