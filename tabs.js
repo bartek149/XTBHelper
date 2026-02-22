@@ -63,6 +63,11 @@ function switchTab(tabName) {
   
   // Load content based on tab
   switch(tabName) {
+    case 'summary':
+      if (typeof loadSummaryContent === 'function') {
+        loadSummaryContent();
+      }
+      break;
     case 'news':
       loadNewsContent();
       break;

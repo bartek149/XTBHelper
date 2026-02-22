@@ -24,6 +24,7 @@
       </h1>
       <nav class="tab-navigation">
         <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
+        <button class="tab-btn" data-tab="summary">🧾 Podsumowanie</button>
         <button class="tab-btn" data-tab="news">📰 News</button>
         <button class="tab-btn" data-tab="reports">📊 Raporty</button>
       </nav>
@@ -42,7 +43,10 @@
       <!-- GÓRNE 2 TABELKI + POZYCJE OTWARTE -->
       <div id="tables-wrapper" class="tables-grid">
     <div class="table-box" style="flex: 1;">
-      <b>📊 All Transactions</b>
+      <div class="table-box-title">
+        <b>📊 All Transactions</b>
+        <span id="all-transactions-count" class="table-box-count"></span>
+      </div>
       <div id="all-table" class="scrollable-table"></div>
     </div>
 
@@ -97,6 +101,13 @@
       <b>📉 Najgorsze Spółki</b>
       <canvas id="worstStocksChart"></canvas>
     </div>
+
+    <div class="table-box bottom-span-all">
+      <div class="chart-header">
+        <b>⚖️ Kapitał ważony i zwrot ważony</b>
+      </div>
+      <canvas id="weightedCapitalChart"></canvas>
+    </div>
   </div>
 
   <!-- TOP MOVERS: XETRA 
@@ -121,6 +132,18 @@
       </div>
       <div id="news-container" class="news-grid">
         <div class="loading-news">🔄 Loading financial news...</div>
+      </div>
+    </div>
+
+    <!-- SUMMARY VIEW -->
+    <div id="summary-view" class="tab-content">
+      <div class="summary-header">
+        <h2>🧾 Podsumowanie transakcji</h2>
+        <p>Szybkie KPI, wykresy i statystyki dla historii zamkniętych pozycji</p>
+      </div>
+
+      <div id="summary-content" class="summary-layout">
+        <div class="loading-reports">🔄 Liczenie statystyk...</div>
       </div>
     </div>
 
@@ -152,8 +175,24 @@
     </div>
   </div>
 
+  <!-- Symbol Trades Modal (Summary) -->
+  <div id="symbolTradesModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="symbolTradesTitle">📑 Szczegóły spółki</h2>
+        <button id="closeSymbolTradesBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="symbolTradesContainer">
+          <div class="loading">Ładowanie danych...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="dashboard.js?v=13"></script>
+  <script src="summary.js?v=1"></script>
   <script src="tabs.js?v=13"></script>
 </body>
 </html>

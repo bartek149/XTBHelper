@@ -198,6 +198,7 @@ function renderTable(data, container) {
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
+  let renderedCount = 0;
   data.forEach((entry) => {
     if (!entry['Symbol'] || (!entry['Gross P/L'] && entry['Gross P/L'] !== 0)) return;
 
@@ -269,10 +270,20 @@ function renderTable(data, container) {
     tr.appendChild(tdDays);
 
     tbody.appendChild(tr);
+    renderedCount += 1;
   });
 
   table.appendChild(tbody);
   container.appendChild(table);
+
+  // Update counter only for the main "All Transactions" table.
+  if (container?.id === 'all-table') {
+    const countEl = document.getElementById('all-transactions-count');
+    if (countEl) {
+      countEl.textContent = `Transakcji: ${renderedCount}`;
+      countEl.title = `Liczba wyświetlonych transakcji: ${renderedCount}`;
+    }
+  }
 }
 
 /* ==================== RESZTA ==================== */

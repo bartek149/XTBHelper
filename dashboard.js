@@ -192,6 +192,148 @@ function renderCapitalChart(entries, deposits) {
       }
     },
   });
+
+  renderWeightedCapitalChart(entries, deposits);
+}
+
+function renderWeightedCapitalChart(entries, deposits) {
+  const ctx = document.getElementById('weightedCapitalChart')?.getContext('2d');
+  if (!ctx) return;
+
+  // Destroy previous instance if any
+  if (window.weightedCapitalChartInstance && typeof window.weightedCapitalChartInstance.destroy === 'function') {
+    try { window.weightedCapitalChartInstance.destroy(); } catch {}
+  }
+
+  const profits = (entries || []).map(e => {
+    const date = parseDateValue(e['Close time']);
+    const amount = parseFloat(e['Gross P/L']);
+    return date && !isNaN(amount)
+      ? { date, amount, type: 'profit' }
+      : null;
+  }).filter(Boolean);
+
+  const depositsOnly = (deposits || []).map(d => ({ ...d, type: 'deposit' }));
+  const allEvents = [...depositsOnly, ...profits].filter(e => e.date instanceof Date && !isNaN(e.date));
+  if (allEvents.length === 0) return;
+
+  allEvents.sort((a, b) => a.date - b.date);
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const safeDiv = (num, den) => (den && isFinite(den) && den !== 0) ? (num / den) : 0;
+
+  let runningCapital = 0;
+  let cumulativeProfit = 0;
+  let cumulativeDeposits = 0;
+
+  // Time-weighted average capital since start
+  let capitalDaysSum = 0;
+  let daysSum = 0;
+  let prevDate = null;
+
+  const labels = [];
+  const depositsSharePctData = [];
+  const weightedProfitPctData = [];
+
+  allEvents.forEach((event) => {
+    if (prevDate instanceof Date) {
+      const dtDays = Math.max(0, (event.date - prevDate) / msPerDay);
+      capitalDaysSum += runningCapital * dtDays;
+      daysSum += dtDays;
+    }
+
+    // Apply event at this timestamp
+    runningCapital += event.amount;
+    if (event.type === 'profit') cumulativeProfit += event.amount;
+    if (event.type === 'deposit') cumulativeDeposits += event.amount;
+
+    const avgCapitalSinceStart = daysSum > 0 ? safeDiv(capitalDaysSum, daysSum) : runningCapital;
+    const weightedReturnPct = avgCapitalSinceStart > 0 ? safeDiv(cumulativeProfit, avgCapitalSinceStart) * 100 : 0;
+
+    // Linia 1: udział kapitału własnego w stanie konta (zysk=0 => 100%)
+    const depositsSharePct = runningCapital > 0 ? safeDiv(cumulativeDeposits, runningCapital) * 100 : 0;
+    // Linia 2: zyski ważone w % (zysk=0 => 0%)
+    const weightedProfitPct = weightedReturnPct;
+
+    labels.push(event.date.toLocaleDateString('pl-PL'));
+    depositsSharePctData.push(depositsSharePct);
+    weightedProfitPctData.push(weightedProfitPct);
+
+    prevDate = event.date;
+  });
+
+  window.weightedCapitalChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Udział kapitału własnego (%)',
+          data: depositsSharePctData,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,0.08)',
+          pointBackgroundColor: (c) => (allEvents[c.dataIndex]?.type === 'deposit' ? '#f59e0b' : '#10b981'),
+          pointBorderColor: (c) => (allEvents[c.dataIndex]?.type === 'deposit' ? '#fbbf24' : '#34d399'),
+          fill: false,
+          tension: 0.25,
+          pointRadius: 2,
+          pointHoverRadius: 6,
+          pointHitRadius: 12,
+        },
+        {
+          label: 'Zyski ważone (%)',
+          data: weightedProfitPctData,
+          borderColor: '#a78bfa',
+          backgroundColor: 'rgba(167,139,250,0.08)',
+          pointBackgroundColor: (c) => (allEvents[c.dataIndex]?.type === 'deposit' ? '#f59e0b' : '#a78bfa'),
+          pointBorderColor: (c) => (allEvents[c.dataIndex]?.type === 'deposit' ? '#fbbf24' : '#c4b5fd'),
+          fill: false,
+          tension: 0.25,
+          pointRadius: 2,
+          pointHoverRadius: 6,
+          pointHitRadius: 12,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top' },
+        decimation: { enabled: true, algorithm: 'lttb', samples: 600 },
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              if (!items || !items.length) return '';
+              const i = items[0].dataIndex;
+              return labels[i] || '';
+            },
+            label: function(context) {
+              const datasetLabel = context.dataset.label || '';
+              const value = context.parsed.y;
+              return `${datasetLabel}: ${value.toFixed(0)}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          position: 'left',
+          beginAtZero: true,
+          grid: { color: 'rgba(148,163,184,0.08)' },
+          ticks: {
+            color: '#e2e8f0',
+            callback: (v) => `${v}%`
+          }
+        },
+        x: {
+          grid: { color: 'rgba(148,163,184,0.08)' },
+          ticks: { color: '#e2e8f0', maxTicksLimit: 12 }
+        }
+      }
+    }
+  });
 }
 
 
@@ -443,9 +585,17 @@ function exportCapitalDataToCsv(entries, deposits) {
       'Wpłaty w miesiącu',
       'Obrót miesięczny',
       'Zwrot z obrotu %',
+      'Kapitał ważony',
+      '% ważony',
       'Kapitał na końcu',
       'Zwrot w %'
     ]);
+
+    // Helpers for weighted columns
+    const daysInMonth = (year, monthIndex0) => new Date(year, monthIndex0 + 1, 0).getDate();
+    const safeDiv = (num, den) => (den && isFinite(den) && den !== 0) ? (num / den) : 0;
+    let weightedCapitalDaysSum = 0;
+    let daysSum = 0;
 
     sortedMonthKeys.forEach(monthKey => {
       const month = monthlyData[monthKey];
@@ -456,6 +606,16 @@ function exportCapitalDataToCsv(entries, deposits) {
       // Turnover return % (earnings / turnover * 100)
       const turnoverReturnPercent = month.turnover > 0 ? (month.earnings / month.turnover * 100) : 0;
 
+      const weightedCapital = (month.capitalStart + month.capitalEnd) / 2;
+      const weightedPercent = safeDiv(month.earnings, weightedCapital) * 100;
+
+      const [yStr, mStr] = monthKey.split('-');
+      const y = Number(yStr);
+      const m0 = Number(mStr) - 1;
+      const d = daysInMonth(y, m0);
+      weightedCapitalDaysSum += weightedCapital * d;
+      daysSum += d;
+
       csvData.push([
         month.monthName,
         month.capitalStart.toFixed(2),
@@ -463,6 +623,8 @@ function exportCapitalDataToCsv(entries, deposits) {
         month.deposits.toFixed(2),
         month.turnover.toFixed(2),
         turnoverReturnPercent.toFixed(2),
+        weightedCapital.toFixed(2),
+        weightedPercent.toFixed(2),
         month.capitalEnd.toFixed(2),
         returnPercent.toFixed(2)
       ]);
@@ -477,6 +639,9 @@ function exportCapitalDataToCsv(entries, deposits) {
     const totalTurnover = Object.values(monthlyData).reduce((sum, month) => sum + month.turnover, 0);
     const overallReturnPercent = finalCapital > 0 ? (totalEarnings / finalCapital * 100) : 0;
     const overallTurnoverReturnPercent = totalTurnover > 0 ? (totalEarnings / totalTurnover * 100) : 0;
+
+    const avgCapitalSinceStart = safeDiv(weightedCapitalDaysSum, daysSum);
+    const avgReturnSinceStart = safeDiv(totalEarnings, avgCapitalSinceStart) * 100;
     
     csvData.push(['']); // Empty row
     csvData.push([
@@ -486,6 +651,8 @@ function exportCapitalDataToCsv(entries, deposits) {
       totalDeposits.toFixed(2),
       totalTurnover.toFixed(2),
       overallTurnoverReturnPercent.toFixed(2),
+      avgCapitalSinceStart.toFixed(2),
+      avgReturnSinceStart.toFixed(2),
       finalCapital.toFixed(2),
       overallReturnPercent.toFixed(2)
     ]);
@@ -646,12 +813,26 @@ function showMonthlyTable(entries, deposits) {
             <th>Wpłaty w miesiącu</th>
             <th>Obrót miesięczny</th>
             <th>Zwrot z obrotu %</th>
+            <th>Kapitał ważony</th>
+            <th>% ważony</th>
             <th>Kapitał na końcu</th>
             <th>Zwrot w %</th>
           </tr>
         </thead>
         <tbody>
     `;
+
+    // Helpers for money-weighted-ish averages when we only know start/end per month.
+    // WeightedCapital(month) = average capital within month ~= (start + end)/2
+    // WeightedPercent(month) = earnings / WeightedCapital * 100
+    // Summary "średni kapitał od początku" = time-weighted average of monthly weighted capitals,
+    // weighted by the number of days in each month.
+    const daysInMonth = (year, monthIndex0) => new Date(year, monthIndex0 + 1, 0).getDate();
+
+    const safeDiv = (num, den) => (den && isFinite(den) && den !== 0) ? (num / den) : 0;
+
+    let weightedCapitalDaysSum = 0;
+    let daysSum = 0;
 
     sortedMonthKeys.forEach(monthKey => {
       const month = monthlyData[monthKey];
@@ -660,9 +841,20 @@ function showMonthlyTable(entries, deposits) {
       // Turnover return % (earnings / turnover * 100)
       const turnoverReturnPercent = month.turnover > 0 ? (month.earnings / month.turnover * 100) : 0;
 
+      const weightedCapital = (month.capitalStart + month.capitalEnd) / 2;
+      const weightedPercent = safeDiv(month.earnings, weightedCapital) * 100;
+
+      const [yStr, mStr] = monthKey.split('-');
+      const y = Number(yStr);
+      const m0 = Number(mStr) - 1;
+      const d = daysInMonth(y, m0);
+      weightedCapitalDaysSum += weightedCapital * d;
+      daysSum += d;
+
       const earningsClass = month.earnings > 0 ? 'positive' : month.earnings < 0 ? 'negative' : 'neutral';
       const returnClass = returnPercent > 0 ? 'positive' : returnPercent < 0 ? 'negative' : 'neutral';
       const turnoverReturnClass = turnoverReturnPercent > 0 ? 'positive' : turnoverReturnPercent < 0 ? 'negative' : 'neutral';
+      const weightedPercentClass = weightedPercent > 0 ? 'positive' : weightedPercent < 0 ? 'negative' : 'neutral';
 
       tableHTML += `
         <tr>
@@ -672,6 +864,8 @@ function showMonthlyTable(entries, deposits) {
           <td>${month.deposits.toFixed(2)} EUR</td>
           <td><strong>${month.turnover.toFixed(2)} EUR</strong></td>
           <td class="${turnoverReturnClass}"><strong>${turnoverReturnPercent.toFixed(2)}%</strong></td>
+          <td><strong>${weightedCapital.toFixed(2)} EUR</strong></td>
+          <td class="${weightedPercentClass}"><strong>${weightedPercent.toFixed(2)}%</strong></td>
           <td><strong>${month.capitalEnd.toFixed(2)} EUR</strong></td>
           <td class="${returnClass}">${returnPercent.toFixed(2)}%</td>
         </tr>
@@ -690,6 +884,10 @@ function showMonthlyTable(entries, deposits) {
     const summaryReturnClass = overallReturnPercent > 0 ? 'positive' : overallReturnPercent < 0 ? 'negative' : 'neutral';
     const summaryTurnoverReturnClass = overallTurnoverReturnPercent > 0 ? 'positive' : overallTurnoverReturnPercent < 0 ? 'negative' : 'neutral';
 
+    const avgCapitalSinceStart = safeDiv(weightedCapitalDaysSum, daysSum);
+    const avgReturnSinceStart = safeDiv(totalEarnings, avgCapitalSinceStart) * 100;
+    const avgReturnClass = avgReturnSinceStart > 0 ? 'positive' : avgReturnSinceStart < 0 ? 'negative' : 'neutral';
+
     tableHTML += `
         <tr class="summary-row">
           <td><strong>PODSUMOWANIE</strong></td>
@@ -698,6 +896,8 @@ function showMonthlyTable(entries, deposits) {
           <td><strong>${totalDeposits.toFixed(2)} EUR</strong></td>
           <td><strong>${totalTurnover.toFixed(2)} EUR</strong></td>
           <td class="${summaryTurnoverReturnClass}"><strong>${overallTurnoverReturnPercent.toFixed(2)}%</strong></td>
+          <td><strong>${avgCapitalSinceStart.toFixed(2)} EUR</strong></td>
+          <td class="${avgReturnClass}"><strong>${avgReturnSinceStart.toFixed(2)}%</strong></td>
           <td><strong>${finalCapital.toFixed(2)} EUR</strong></td>
           <td class="${summaryReturnClass}"><strong>${overallReturnPercent.toFixed(2)}%</strong></td>
         </tr>
