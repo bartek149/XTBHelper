@@ -21,7 +21,73 @@ async function fetchYahooNames(symbols) {
   return results;
 }
 
+let monthChartInstance = null;
+let monthChartMode = 'line'; // 'line' (cumulative) | 'bar' (daily)
+
+let allTimeChartInstance = null;
+let allTimeChartMode = 'line'; // 'line' (cumulative) | 'bar' (daily)
+
+function updateMonthChartToggleButton() {
+  const btn = document.getElementById('toggleMonthChartTypeBtn');
+  if (!btn) return;
+
+  if (monthChartMode === 'line') {
+    btn.innerHTML = '📊 Słupki';
+    btn.title = 'Przełącz na widok słupkowy (saldo dzienne)';
+  } else {
+    btn.innerHTML = '📈 Linia';
+    btn.title = 'Przełącz na widok liniowy (kumulacja w miesiącu)';
+  }
+}
+
+function setupMonthChartToggle() {
+  const btn = document.getElementById('toggleMonthChartTypeBtn');
+  if (!btn) return;
+
+  updateMonthChartToggleButton();
+
+  btn.addEventListener('click', () => {
+    monthChartMode = (monthChartMode === 'line') ? 'bar' : 'line';
+    updateMonthChartToggleButton();
+
+    const entries = window.allEntries || [];
+    const offset = window.currentMonthOffset || 0;
+    const monthEntries = filterByMonth(entries, offset);
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    renderMonthChart(monthEntries, target);
+  });
+}
+
+function updateAllTimeChartToggleButton() {
+  const btn = document.getElementById('toggleAllTimeChartTypeBtn');
+  if (!btn) return;
+
+  if (allTimeChartMode === 'line') {
+    btn.innerHTML = '📊 Słupki';
+    btn.title = 'Przełącz na widok słupkowy (saldo dzienne)';
+  } else {
+    btn.innerHTML = '📈 Linia';
+    btn.title = 'Przełącz na widok liniowy (kumulacja od początku)';
+  }
+}
+
+function setupAllTimeChartToggle() {
+  const btn = document.getElementById('toggleAllTimeChartTypeBtn');
+  if (!btn) return;
+
+  updateAllTimeChartToggleButton();
+
+  btn.addEventListener('click', () => {
+    allTimeChartMode = (allTimeChartMode === 'line') ? 'bar' : 'line';
+    updateAllTimeChartToggleButton();
+    renderAllTimeChart(window.allEntries || []);
+  });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  setupMonthChartToggle();
+  setupAllTimeChartToggle();
   fetch('raport.xlsx')
     .then(res => {
       if (!res.ok) throw new Error('Nie można znaleźć raport.xlsx');
@@ -94,6 +160,7 @@ window.addEventListener('DOMContentLoaded', () => {
       renderTable(enrichedEntries, document.getElementById('all-table'));
       renderRecentTable(enrichedEntries);
       renderPieCharts(enrichedEntries);
+      renderAllTimeChart(enrichedEntries);
     })
     .catch(err => {
       console.error("❌ Błąd:", err);
@@ -344,6 +411,343 @@ function updateMonthSummary(entries, offset) {
        <div class="item">📈 Avg.: <span class="value ${pctCls}">${avgPct.toFixed(2)}%</span></div>
     `;
   }
+
+  renderMonthChart(monthEntries, target);
+}
+
+function renderMonthChart(monthEntries, targetMonthDate) {
+  const canvas = document.getElementById('monthChart');
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx || typeof Chart === 'undefined') return;
+
+  // Destroy previous chart instance
+  if (monthChartInstance && typeof monthChartInstance.destroy === 'function') {
+    try { monthChartInstance.destroy(); } catch {}
+    monthChartInstance = null;
+  }
+
+  if (!Array.isArray(monthEntries) || monthEntries.length === 0) {
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  // Aggregate closed P/L by day, then build cumulative series.
+  const dailyMap = new Map();
+  const dailyTradesMap = new Map();
+  for (const e of monthEntries) {
+    const raw = e['Close time'] ?? e['Close Time'];
+    const dt = parseDateValue(raw);
+    if (!(dt instanceof Date) || isNaN(dt)) continue;
+
+    const pl = parseFloat(e['Gross P/L']);
+    if (isNaN(pl)) continue;
+
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    dailyMap.set(key, (dailyMap.get(key) ?? 0) + pl);
+
+    const symbol = (e['Symbol'] ?? e.Symbol ?? '').toString().trim();
+    const name = (e['Name'] ?? e.Name ?? '').toString().trim();
+    const timeLabel = dt.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    const list = dailyTradesMap.get(key) ?? [];
+    list.push({ symbol, name, pl, timeLabel });
+    dailyTradesMap.set(key, list);
+  }
+
+  const keys = Array.from(dailyMap.keys()).sort();
+  const dailyValues = keys.map(k => Number(((dailyMap.get(k) ?? 0)).toFixed(2)));
+  const dayKeys = [];
+  const labels = [];
+  const cumulativeValues = [];
+  let cumulative = 0;
+  for (const k of keys) {
+    cumulative += (dailyMap.get(k) ?? 0);
+    const [y, m, d] = k.split('-').map(Number);
+    const dt = new Date(y, (m - 1), d);
+    dayKeys.push(k);
+    labels.push(dt.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' }));
+    cumulativeValues.push(Number(cumulative.toFixed(2)));
+  }
+
+  const titleMonth = (targetMonthDate instanceof Date)
+    ? targetMonthDate.toLocaleDateString('pl-PL', { year: 'numeric', month: 'long' })
+    : '';
+
+  const isBar = monthChartMode === 'bar';
+
+  monthChartInstance = new Chart(ctx, {
+    type: isBar ? 'bar' : 'line',
+    data: {
+      labels,
+      datasets: [
+        isBar
+          ? {
+              label: `Saldo dzienne (EUR) — ${titleMonth}`,
+              data: dailyValues,
+              backgroundColor: dailyValues.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(239, 68, 68, 0.55)'),
+              borderColor: dailyValues.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)'),
+              borderWidth: 1,
+              borderRadius: 4,
+              maxBarThickness: 22,
+            }
+          : {
+              label: `Kumulowany zysk/strata (EUR) — ${titleMonth}`,
+              data: cumulativeValues,
+              borderColor: 'rgba(16, 185, 129, 0.95)',
+              segment: {
+                borderColor: (ctx) => {
+                  const y0 = ctx?.p0?.parsed?.y;
+                  const y1 = ctx?.p1?.parsed?.y;
+                  if (typeof y0 !== 'number' || typeof y1 !== 'number') return 'rgba(16, 185, 129, 0.95)';
+                  return y1 < y0
+                    ? 'rgba(239, 68, 68, 0.95)'
+                    : 'rgba(16, 185, 129, 0.95)';
+                }
+              },
+              backgroundColor: 'rgba(16, 185, 129, 0.18)',
+              fill: true,
+              tension: 0.25,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              pointHitRadius: 10,
+            }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              if (!items || !items.length) return '';
+              const i = items[0].dataIndex;
+              const key = dayKeys[i];
+              if (!key) return labels[i] || '';
+
+              const [y, m, d] = key.split('-').map(Number);
+              const dt = new Date(y, (m - 1), d);
+              return dt.toLocaleDateString('pl-PL', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            },
+            label: (context) => {
+              const v = context.parsed?.y;
+              if (typeof v !== 'number' || isNaN(v)) return isBar ? 'Saldo dzienne: -' : 'Kumulacja: -';
+
+              const sign = v >= 0 ? '+' : '';
+              return isBar
+                ? `Saldo dzienne: ${sign}${v.toFixed(2)} EUR`
+                : `Kumulacja: ${sign}${v.toFixed(2)} EUR`;
+            },
+            afterLabel: (context) => {
+              if (!isBar) return '';
+              const i = context.dataIndex;
+              const cum = cumulativeValues[i];
+              if (typeof cum !== 'number' || isNaN(cum)) return '';
+              const sign = cum >= 0 ? '+' : '';
+              return `Kumulacja: ${sign}${cum.toFixed(2)} EUR`;
+            },
+            afterBody: (items) => {
+              if (!items || !items.length) return [];
+              const i = items[0].dataIndex;
+              const key = dayKeys[i];
+              if (!key) return [];
+
+              const trades = dailyTradesMap.get(key) ?? [];
+              if (!trades.length) return [];
+
+              const lines = ['Zamknięte pozycje:'];
+              for (const t of trades) {
+                const sign = t.pl >= 0 ? '+' : '';
+                const who = (t.name || t.symbol || '—').toString();
+                const sym = t.symbol ? ` (${t.symbol})` : '';
+                lines.push(`• ${t.timeLabel} ${who}${sym}: ${sign}${t.pl.toFixed(2)} EUR`);
+              }
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#e2e8f0', maxTicksLimit: 10 },
+          grid: { color: 'rgba(148,163,184,0.08)' }
+        },
+        y: {
+          ticks: {
+            color: '#e2e8f0',
+            callback: (v) => `${v}€`,
+          },
+          grid: { color: 'rgba(148,163,184,0.08)' }
+        }
+      }
+    }
+  });
+}
+
+function renderAllTimeChart(allEntries) {
+  const canvas = document.getElementById('allTimeChart');
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx || typeof Chart === 'undefined') return;
+
+  if (allTimeChartInstance && typeof allTimeChartInstance.destroy === 'function') {
+    try { allTimeChartInstance.destroy(); } catch {}
+    allTimeChartInstance = null;
+  }
+
+  const entries = Array.isArray(allEntries) ? allEntries : [];
+  const parsed = [];
+  for (const e of entries) {
+    const raw = e['Close time'] ?? e['Close Time'];
+    const dt = parseDateValue(raw);
+    if (!(dt instanceof Date) || isNaN(dt)) continue;
+    const pl = parseFloat(e['Gross P/L']);
+    if (isNaN(pl)) continue;
+    parsed.push({ e, dt, pl });
+  }
+
+  if (parsed.length === 0) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  parsed.sort((a, b) => a.dt - b.dt);
+
+  const dailyMap = new Map();
+  const dailyTradesMap = new Map();
+  for (const { e, dt, pl } of parsed) {
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    dailyMap.set(key, (dailyMap.get(key) ?? 0) + pl);
+
+    const symbol = (e['Symbol'] ?? e.Symbol ?? '').toString().trim();
+    const name = (e['Name'] ?? e.Name ?? '').toString().trim();
+    const timeLabel = dt.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    const list = dailyTradesMap.get(key) ?? [];
+    list.push({ symbol, name, pl, timeLabel });
+    dailyTradesMap.set(key, list);
+  }
+
+  const keys = Array.from(dailyMap.keys()).sort();
+  const dailyValues = keys.map(k => Number(((dailyMap.get(k) ?? 0)).toFixed(2)));
+  const dayKeys = [];
+  const labels = [];
+  const cumulativeValues = [];
+  let cumulative = 0;
+  for (const k of keys) {
+    cumulative += (dailyMap.get(k) ?? 0);
+    const [y, m, d] = k.split('-').map(Number);
+    const dt = new Date(y, (m - 1), d);
+    dayKeys.push(k);
+    labels.push(dt.toLocaleDateString('pl-PL', { year: '2-digit', month: '2-digit', day: '2-digit' }));
+    cumulativeValues.push(Number(cumulative.toFixed(2)));
+  }
+
+  const isBar = allTimeChartMode === 'bar';
+  const lineDataset = {
+    label: 'Kumulowany zysk/strata (EUR)',
+    data: cumulativeValues,
+    borderColor: 'rgba(16, 185, 129, 0.95)',
+    segment: {
+      borderColor: (ctx) => {
+        const y0 = ctx?.p0?.parsed?.y;
+        const y1 = ctx?.p1?.parsed?.y;
+        if (typeof y0 !== 'number' || typeof y1 !== 'number') return 'rgba(16, 185, 129, 0.95)';
+        return y1 < y0 ? 'rgba(239, 68, 68, 0.95)' : 'rgba(16, 185, 129, 0.95)';
+      }
+    },
+    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+    fill: true,
+    tension: 0.25,
+    pointRadius: 1,
+    pointHoverRadius: 4,
+    pointHitRadius: 10,
+  };
+
+  const barDataset = {
+    label: 'Saldo dzienne (EUR)',
+    data: dailyValues,
+    backgroundColor: dailyValues.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(239, 68, 68, 0.55)'),
+    borderColor: dailyValues.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)'),
+    borderWidth: 1,
+    borderRadius: 4,
+    maxBarThickness: 18,
+  };
+
+  allTimeChartInstance = new Chart(ctx, {
+    type: isBar ? 'bar' : 'line',
+    data: {
+      labels,
+      datasets: [isBar ? barDataset : lineDataset]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        decimation: { enabled: !isBar, algorithm: 'lttb', samples: 800 },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              if (!items || !items.length) return '';
+              const i = items[0].dataIndex;
+              const key = dayKeys[i];
+              if (!key) return labels[i] || '';
+
+              const [y, m, d] = key.split('-').map(Number);
+              const dt = new Date(y, (m - 1), d);
+              return dt.toLocaleDateString('pl-PL', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            },
+            label: (context) => {
+              const v = context.parsed?.y;
+              if (typeof v !== 'number' || isNaN(v)) return isBar ? 'Saldo dzienne: -' : 'Kumulacja: -';
+              const sign = v >= 0 ? '+' : '';
+              return isBar
+                ? `Saldo dzienne: ${sign}${v.toFixed(2)} EUR`
+                : `Kumulacja: ${sign}${v.toFixed(2)} EUR`;
+            },
+            afterLabel: (context) => {
+              if (!isBar) return '';
+              const i = context.dataIndex;
+              const cum = cumulativeValues[i];
+              if (typeof cum !== 'number' || isNaN(cum)) return '';
+              const sign = cum >= 0 ? '+' : '';
+              return `Kumulacja: ${sign}${cum.toFixed(2)} EUR`;
+            },
+            afterBody: (items) => {
+              if (!items || !items.length) return [];
+              const i = items[0].dataIndex;
+              const key = dayKeys[i];
+              if (!key) return [];
+
+              const trades = dailyTradesMap.get(key) ?? [];
+              if (!trades.length) return [];
+
+              const lines = ['Zamknięte pozycje:'];
+              for (const t of trades) {
+                const sign = t.pl >= 0 ? '+' : '';
+                const who = (t.name || t.symbol || '—').toString();
+                const sym = t.symbol ? ` (${t.symbol})` : '';
+                lines.push(`• ${t.timeLabel} ${who}${sym}: ${sign}${t.pl.toFixed(2)} EUR`);
+              }
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#e2e8f0', maxTicksLimit: 14 },
+          grid: { color: 'rgba(148,163,184,0.08)' }
+        },
+        y: {
+          ticks: { color: '#e2e8f0', callback: (v) => `${v}€` },
+          grid: { color: 'rgba(148,163,184,0.08)' }
+        }
+      }
+    }
+  });
 }
 
 function calculateMonthlyPercent(entries) {

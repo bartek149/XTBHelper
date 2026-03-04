@@ -64,16 +64,17 @@
 
 </div>
 
-
     <div class="table-box" style="flex: 1;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-        <b>📌 Open Positions</b>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span id="live-data-indicator" style="font-size: 0.6rem; color: #10b981; font-weight: 600;"></span>
-          <button id="refresh-prices-btn" class="refresh-btn">🔄 Odśwież</button>
+      <div class="table-box-title">
+        <b>📈 Zysk w miesiącu (kumulacja)</b>
+        <div class="chart-buttons">
+          <span class="table-box-count">na podstawie zamkniętych</span>
+          <button id="toggleMonthChartTypeBtn" class="export-btn table-btn" title="Przełącz typ wykresu">
+            📊 Słupki
+          </button>
         </div>
       </div>
-      <div id="open-table" class="scrollable-table"></div>
+      <canvas id="monthChart"></canvas>
     </div>
   </div>
 
@@ -107,6 +108,25 @@
         <b>⚖️ Kapitał ważony i zwrot ważony</b>
       </div>
       <canvas id="weightedCapitalChart"></canvas>
+    </div>
+
+    <div class="table-box bottom-span-all">
+      <div class="chart-header">
+        <b>📈 Zysk kumulowany (całość)</b>
+        <div class="chart-buttons">
+          <button id="toggleAllTimeChartTypeBtn" class="export-btn table-btn" title="Przełącz typ wykresu">
+            📊 Słupki
+          </button>
+        </div>
+      </div>
+      <canvas id="allTimeChart"></canvas>
+    </div>
+
+    <div class="table-box bottom-span-all market-corr-box">
+      <div class="chart-header">
+        <b>📊 ROI (%) vs DAX vs US</b>
+      </div>
+      <canvas id="marketCorrelationChart"></canvas>
     </div>
   </div>
 

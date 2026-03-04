@@ -16,8 +16,16 @@ let openPositionsData = [];
 let refreshInterval = null;
 
 window.addEventListener('DOMContentLoaded', () => {
-  loadOpenPositions();
-  
+  const openTableEl = document.getElementById('open-table');
+  const hasOpenPositionsUI = !!openTableEl;
+
+  loadOpenPositions({ render: hasOpenPositionsUI });
+
+  if (!hasOpenPositionsUI) {
+    // UI removed from dashboard; keep data available for other modules (e.g. News)
+    return;
+  }
+
   // Podłącz przycisk odświeżania z nagłówka
   const refreshBtn = document.getElementById('refresh-prices-btn');
   if (refreshBtn) {
@@ -28,7 +36,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     };
   }
-  
+
   // Automatyczne odświeżanie co 30 sekund
   refreshInterval = setInterval(() => {
     if (openPositionsData.length > 0) {
@@ -45,7 +53,8 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-function loadOpenPositions() {
+function loadOpenPositions(options = {}) {
+  const shouldRender = options.render === true;
   fetch('raport.xlsx')
     .then(res => {
       if (!res.ok) throw new Error('Nie można znaleźć raport.xlsx');
@@ -68,11 +77,19 @@ function loadOpenPositions() {
       });
 
       openPositionsData = mergeOpenPositions(rawEntries);
-      renderOpenPositionsLive(openPositionsData, document.getElementById('open-table'));
+      if (shouldRender) {
+        const container = document.getElementById('open-table');
+        if (container) {
+          renderOpenPositionsLive(openPositionsData, container);
+        }
+      }
     })
     .catch(err => {
       console.error("❌ Błąd otwartych pozycji:", err);
-      document.getElementById('open-table').textContent = "Błąd: " + err.message;
+      const container = document.getElementById('open-table');
+      if (container) {
+        container.textContent = "Błąd: " + err.message;
+      }
     });
 }
 

@@ -1155,6 +1155,15 @@ body {
   border-radius: 0.375rem;
 }
 
+canvas#monthChart {
+  background: #1f2937;
+  border-radius: 0.35rem;
+  padding: 0.75rem;
+  box-shadow: inset 0 0 6px rgba(16, 185, 129, 0.12);
+  height: 300px !important;
+  max-height: 300px !important;
+}
+
 /* ================== MODERN TABLES ================== */
 table {
   width: 100%;
@@ -1290,6 +1299,32 @@ canvas#weightedCapitalChart {
   box-shadow: inset 0 0 6px rgba(96, 165, 250, 0.18);
   height: 300px !important;
   max-height: 300px !important;
+}
+
+canvas#allTimeChart {
+  background: #1f2937;
+  border-radius: 0.35rem;
+  padding: 0.75rem;
+  box-shadow: inset 0 0 6px rgba(16, 185, 129, 0.12);
+  height: 320px !important;
+  max-height: 320px !important;
+}
+
+canvas#marketCorrelationChart {
+  background: #1f2937;
+  border-radius: 0.35rem;
+  padding: 0;
+  box-shadow: inset 0 0 6px rgba(96, 165, 250, 0.14);
+  height: auto !important;
+  max-height: none !important;
+  flex: 1 1 auto;
+}
+
+/* Ensure x-axis labels aren't clipped by fixed box height.
+   This must override `.bottom-charts .table-box.bottom-span-all { height: ... }` */
+.bottom-charts .table-box.bottom-span-all.market-corr-box {
+  height: 780px;
+  padding-bottom: 1.75rem;
 }
 
 /* Chart header with export button */

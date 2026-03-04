@@ -49,8 +49,13 @@ window.addEventListener("DOMContentLoaded", () => {
       const wsDeposits = wb.Sheets[depositsSheetName];
       const deposits = extractDeposits(wsDeposits);
 
+      // Expose deposits for other modules
+      window.deposits = deposits;
+
       renderCapitalChart(closedEntries, deposits);
       setupCsvExport(closedEntries, deposits);
+
+      renderMarketCorrelationChart(closedEntries, deposits);
      
     })
     .catch((err) => {
@@ -482,6 +487,355 @@ function setupCsvExport(entries, deposits) {
 
   showTableBtn.addEventListener('click', () => {
     showMonthlyTable(entries, deposits);
+  });
+}
+
+function toDateKey(date) {
+  if (!(date instanceof Date) || isNaN(date)) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+async function fetchYahooDailyCloseSeries(symbol, startDate, endDate) {
+  const startSec = Math.floor(startDate.getTime() / 1000);
+  const endSec = Math.floor(endDate.getTime() / 1000);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${startSec}&period2=${endSec}&interval=1d&includePrePost=false&events=div%7Csplit`;
+
+  // Use proxy to avoid CORS issues
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error(`Yahoo proxy error: ${res.status}`);
+  const proxyData = await res.json();
+  const data = JSON.parse(proxyData.contents);
+
+  const result = data?.chart?.result?.[0];
+  const timestamps = result?.timestamp || [];
+  const closes = result?.indicators?.quote?.[0]?.close || [];
+  if (!timestamps.length || !closes.length) return new Map();
+
+  const map = new Map();
+  for (let i = 0; i < timestamps.length; i++) {
+    const ts = timestamps[i];
+    const close = closes[i];
+    if (!ts || close === null || close === undefined) continue;
+    const dt = new Date(ts * 1000);
+    const key = toDateKey(dt);
+    if (!key) continue;
+    map.set(key, close);
+  }
+  return map;
+}
+
+async function fetchYahooDailyCloseSeriesFirst(symbolCandidates, startDate, endDate) {
+  const candidates = Array.isArray(symbolCandidates) ? symbolCandidates : [];
+  for (const symbol of candidates) {
+    try {
+      const map = await fetchYahooDailyCloseSeries(symbol, startDate, endDate);
+      if (map && typeof map.size === 'number' && map.size > 0) {
+        return { symbol, map };
+      }
+    } catch (e) {
+      console.warn(`⚠️ Failed to fetch ${symbol}:`, e?.message || e);
+    }
+  }
+  return { symbol: null, map: new Map() };
+}
+
+function mapToReturnPctSeries(dateKeys, closeMap) {
+  let baseClose = null;
+  let lastReturn = null;
+  const series = [];
+
+  for (const key of dateKeys) {
+    const close = closeMap.get(key);
+    if (baseClose === null) {
+      if (typeof close === 'number' && isFinite(close) && close > 0) {
+        baseClose = close;
+        lastReturn = 0;
+        series.push(0);
+      } else {
+        series.push(null);
+      }
+      continue;
+    }
+
+    if (typeof close === 'number' && isFinite(close) && close > 0) {
+      lastReturn = ((close / baseClose) - 1) * 100;
+    }
+    series.push(lastReturn);
+  }
+
+  return series;
+}
+
+function mapToCloseSeries(dateKeys, closeMap) {
+  let lastClose = null;
+  const series = [];
+  for (const key of dateKeys) {
+    const close = closeMap.get(key);
+    if (typeof close === 'number' && isFinite(close) && close > 0) {
+      lastClose = close;
+    }
+    series.push(lastClose);
+  }
+  return series;
+}
+
+function formatIndexValue(val) {
+  if (val === null || val === undefined || !isFinite(val)) return '-';
+  try {
+    return new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 }).format(val);
+  } catch {
+    return Math.round(val).toString();
+  }
+}
+
+function buildAccountWeightedProfitSeries(entries, deposits) {
+  const profits = (entries || []).map(e => {
+    const date = parseDateValue(e['Close time'] ?? e['Close Time']);
+    const amount = parseFloat(e['Gross P/L']);
+    return (date && !isNaN(amount)) ? { date, amount } : null;
+  }).filter(Boolean);
+
+  const depositsOnly = (deposits || []).map(d => ({ date: d.date, amount: d.amount }));
+  const dates = [...profits.map(p => p.date), ...depositsOnly.map(d => d.date)]
+    .filter(d => d instanceof Date && !isNaN(d));
+  if (dates.length === 0) return null;
+
+  // Normalize start/end to midnight
+  const minDate = new Date(Math.min(...dates.map(d => d.getTime())));
+  const maxDate = new Date(Math.max(...dates.map(d => d.getTime())));
+  const start = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
+  const end = new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate());
+
+  const dailyProfit = new Map();
+  for (const p of profits) {
+    const key = toDateKey(p.date);
+    if (!key) continue;
+    dailyProfit.set(key, (dailyProfit.get(key) ?? 0) + p.amount);
+  }
+
+  const dailyDeposit = new Map();
+  for (const d of depositsOnly) {
+    const key = toDateKey(d.date);
+    if (!key) continue;
+    dailyDeposit.set(key, (dailyDeposit.get(key) ?? 0) + (parseFloat(d.amount) || 0));
+  }
+
+  const dateKeys = [];
+  const labels = [];
+  const weightedProfitPctSeries = [];
+  let cumulativeProfit = 0;
+  let runningCapital = 0;
+
+  // Time-weighted average capital since start
+  const msPerDay = 24 * 60 * 60 * 1000;
+  let capitalDaysSum = 0;
+  let daysSum = 0;
+  let prevDate = null;
+
+  for (let cur = start; cur <= end; cur = addDays(cur, 1)) {
+    const key = toDateKey(cur);
+    if (!key) continue;
+    dateKeys.push(key);
+    labels.push(cur.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: '2-digit' }));
+
+    // Advance time by one day at current running capital
+    if (prevDate instanceof Date) {
+      const dtDays = Math.max(0, (cur.getTime() - prevDate.getTime()) / msPerDay);
+      capitalDaysSum += runningCapital * dtDays;
+      daysSum += dtDays;
+    }
+
+    // Apply today's events (deposit + closed profits)
+    const dep = (dailyDeposit.get(key) ?? 0);
+    const pl = (dailyProfit.get(key) ?? 0);
+    runningCapital += (dep + pl);
+    cumulativeProfit += pl;
+
+    const avgCapitalSinceStart = daysSum > 0 ? (capitalDaysSum / daysSum) : runningCapital;
+    const weightedProfitPct = (avgCapitalSinceStart && isFinite(avgCapitalSinceStart) && avgCapitalSinceStart > 0)
+      ? (cumulativeProfit / avgCapitalSinceStart) * 100
+      : null;
+    weightedProfitPctSeries.push(weightedProfitPct);
+
+    prevDate = cur;
+  }
+
+  return { start, end, dateKeys, labels, weightedProfitPctSeries };
+}
+
+async function renderMarketCorrelationChart(entries, deposits) {
+  const canvas = document.getElementById('marketCorrelationChart');
+  const ctx = canvas?.getContext?.('2d');
+  if (!ctx || typeof Chart === 'undefined') return;
+
+  const account = buildAccountWeightedProfitSeries(entries, deposits);
+  if (!account) return;
+
+  const { start, end, dateKeys, labels, weightedProfitPctSeries } = account;
+
+  // Fetch indices: DAX and US (S&P 500)
+  let daxCloseMap = new Map();
+  let usCloseMap = new Map();
+  let polandCloseMap = new Map();
+  let polandSymbolUsed = null;
+  try {
+    daxCloseMap = await fetchYahooDailyCloseSeries('^GDAXI', start, end);
+  } catch (e) {
+    console.warn('⚠️ Failed to fetch DAX (^GDAXI):', e?.message || e);
+  }
+  try {
+    usCloseMap = await fetchYahooDailyCloseSeries('^GSPC', start, end);
+  } catch (e) {
+    console.warn('⚠️ Failed to fetch US (^GSPC):', e?.message || e);
+  }
+  {
+    // Poland market proxy: try Warsaw indices first, then Poland ETFs (most reliable on Yahoo).
+    const { symbol, map } = await fetchYahooDailyCloseSeriesFirst(
+      [
+        '^WIG20',
+        'WIG20.WA',
+        '^WIG',
+        'WIG.WA',
+        '^WIG30',
+        // ETFs representing Poland (USD) – good proxy when indices are unavailable
+        'EWP',
+        'EPOL',
+      ],
+      start,
+      end
+    );
+    polandSymbolUsed = symbol;
+    polandCloseMap = map;
+    if (!polandSymbolUsed || polandCloseMap.size === 0) {
+      console.warn('⚠️ No Poland market data found from Yahoo for the tried tickers.');
+    }
+  }
+
+  const daxReturn = mapToReturnPctSeries(dateKeys, daxCloseMap);
+  const usReturn = mapToReturnPctSeries(dateKeys, usCloseMap);
+  const daxCloseSeries = mapToCloseSeries(dateKeys, daxCloseMap);
+  const usCloseSeries = mapToCloseSeries(dateKeys, usCloseMap);
+  const hasPoland = polandCloseMap && typeof polandCloseMap.size === 'number' && polandCloseMap.size > 0;
+  const polandReturn = hasPoland ? mapToReturnPctSeries(dateKeys, polandCloseMap) : null;
+  const polandCloseSeries = hasPoland ? mapToCloseSeries(dateKeys, polandCloseMap) : null;
+
+  // Destroy previous instance if any
+  if (window.marketCorrelationChartInstance && typeof window.marketCorrelationChartInstance.destroy === 'function') {
+    try { window.marketCorrelationChartInstance.destroy(); } catch {}
+  }
+
+  const datasets = [
+    {
+      label: 'Konto (zysk ważony %)',
+      data: weightedProfitPctSeries,
+      borderColor: 'rgba(16, 185, 129, 0.95)',
+      backgroundColor: 'rgba(16, 185, 129, 0.10)',
+      fill: false,
+      tension: 0.25,
+      pointRadius: 0,
+      spanGaps: true,
+    },
+    {
+      label: 'DAX (^GDAXI) %',
+      data: daxReturn,
+      __closeSeries: daxCloseSeries,
+      borderColor: 'rgba(96, 165, 250, 0.95)',
+      backgroundColor: 'rgba(96, 165, 250, 0.10)',
+      fill: false,
+      tension: 0.25,
+      pointRadius: 0,
+      spanGaps: true,
+    },
+    // Poland proxy is optional (Yahoo may not provide it)
+    ...(hasPoland
+      ? [{
+          label: `Polska (${polandSymbolUsed}) %`,
+          data: polandReturn,
+          __closeSeries: polandCloseSeries,
+          borderColor: 'rgba(167, 139, 250, 0.95)',
+          backgroundColor: 'rgba(167, 139, 250, 0.10)',
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          spanGaps: true,
+        }]
+      : []),
+    {
+      label: 'US (^GSPC) %',
+      data: usReturn,
+      __closeSeries: usCloseSeries,
+      borderColor: 'rgba(245, 158, 11, 0.95)',
+      backgroundColor: 'rgba(245, 158, 11, 0.10)',
+      fill: false,
+      tension: 0.25,
+      pointRadius: 0,
+      spanGaps: true,
+    }
+  ];
+
+  window.marketCorrelationChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: {
+        padding: { bottom: 44 }
+      },
+      plugins: {
+        legend: { position: 'top' },
+        decimation: { enabled: true, algorithm: 'lttb', samples: 900 },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const label = context.dataset.label || '';
+              const v = context.parsed?.y;
+              if (typeof v !== 'number' || isNaN(v)) return `${label}: -`;
+              const sign = v >= 0 ? '+' : '';
+              return `${label}: ${sign}${v.toFixed(2)}%`;
+            },
+            afterLabel: (context) => {
+              const closeSeries = context?.dataset?.__closeSeries;
+              if (!Array.isArray(closeSeries)) return '';
+              const close = closeSeries[context.dataIndex];
+              if (close === null || close === undefined || !isFinite(close)) return '';
+              return `Wartość: ${formatIndexValue(close)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#e2e8f0',
+            autoSkip: true,
+            maxTicksLimit: 9,
+            maxRotation: 35,
+            minRotation: 0,
+            padding: 12,
+          },
+          grid: { color: 'rgba(148,163,184,0.08)' }
+        },
+        y: {
+          ticks: {
+            color: '#e2e8f0',
+            callback: (v) => `${v}%`,
+          },
+          grid: { color: 'rgba(148,163,184,0.08)' }
+        }
+      }
+    }
   });
 }
 
